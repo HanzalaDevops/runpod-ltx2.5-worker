@@ -1,0 +1,17 @@
+# Runtime deps installed by the Dockerfile. Listed here for local development
+# and for tooling that reads requirements.txt; the image installs them directly
+# so that the torch pins and the LTX_REF build args stay layer-ordered.
+#
+# NOT listed here (installed by the Dockerfile with explicit pins):
+#   torch==2.9.1, torchaudio==2.9.1, torchvision==0.24.1
+#   transformers>=5.8.0,<5.15
+#   ltx-core, ltx-pipelines  (git, pinned to LTX_REF)
+
+runpod
+boto3
+huggingface_hub
+av
+tqdm
+pillow
+openimageio
+cloudpickle>=3.1

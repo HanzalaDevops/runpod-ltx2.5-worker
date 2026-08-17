@@ -1,0 +1,93 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.*
+!.env.example
+
+# ---- Testing / coverage ----
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Model weights / checkpoints ----
+# LTX-2 and Gemma weights are downloaded at build/runtime, never committed
+models/
+ltx-2.5/
+gemma-4-12b/
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.onnx
+*.gguf
+
+# ---- Generated media / worker outputs ----
+outputs/
+output/
+*.mp4
+*.mov
+*.webm
+*.gif
+*.png
+*.jpg
+*.jpeg
+# keep documentation/example assets if any live under docs/ or assets/
+!docs/**/*.png
+!assets/**/*.png
+
+# ---- Secrets / credentials ----
+# HF token, S3/boto3 credentials must never be committed
+.env
+*.pem
+*.key
+credentials.json
+secrets.json
+
+# ---- Logs / temp ----
+*.log
+tmp/
+temp/
+*.tmp
+
+# ---- IDE / editor ----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
