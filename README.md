@@ -6,7 +6,7 @@ Renders to mp4 and uploads to a DigitalOcean Spaces bucket supplied per request.
 Successor to `runpod-ltx2-worker` (LTX-2.3). **The request contract is unchanged**, so
 existing callers work against this endpoint without modification.
 
----
+----
 
 ## Why `DistilledPipeline`
 
