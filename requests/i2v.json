@@ -1,6 +1,6 @@
 {
   "input": {
-    "prompt": "The woman in the red coat turns her head slowly to look off-camera left, snow settling on her shoulders. The camera pushes in gently. Ambient sound of falling snow and distant traffic.",
+    "prompt": "A woman stands with her back to the camera in heavy falling snow, wearing a rust-red fleece coat with a black bag strap across her shoulder. Her long dark hair, flecked with settled snowflakes, spills down her back. She turns her head slowly to the left, revealing her profile, then lifts her chin slightly as she looks off into the distance. Large snowflakes drift down continuously across the frame, some catching the light as they fall. Behind her, brick townhouses and a bare winter tree sit softly out of focus under thick snow. The camera holds a slow, steady push-in toward her, maintaining a shallow depth of field so she stays sharp against the blurred street. Flat, diffuse overcast daylight, muted cool tones broken by the warm red of her coat. Ambient sound of soft wind and falling snow, with faint distant traffic.",
 
     "width": 768,
     "height": 512,
@@ -10,7 +10,7 @@
 
     "image_conditioning": [
       {
-        "url": "https://REPLACE_WITH_PUBLIC_OR_PRESIGNED_IMAGE_URL/first-frame.png",
+        "url": "https://images.unsplash.com/photo-1512917334342-eb0d0661e8fe?fm=jpg&q=80&w=1536&h=1024&fit=crop",
         "frame_idx": 0,
         "strength": 1.0
       }
