@@ -738,6 +738,18 @@ def boot():
     Dockerfile actually runs -- can call it without duplicating the sequence.
     Importing this module never triggers any of it.
     """
+    # Identity banner, first line of every worker's log. Both this image and the
+    # LTX-2.3 worker derive from pytorch/pytorch:2.4.0-cuda12.1-cudnn9-devel, so
+    # the NVIDIA CUDA 12.1.1 header the base image prints is identical in both
+    # and cannot be used to tell them apart. Without this line the first
+    # distinguishing output is a [models] message most of the way into startup.
+    print(
+        f"[worker] ltx-2.5-distilled | quantization={DEFAULT_QUANTIZATION} "
+        f"offload={DEFAULT_OFFLOAD_MODE} video_vae={VIDEO_VAE_VARIANT} "
+        f"models_root={MODELS_ROOT}",
+        flush=True,
+    )
+
     silence_use_fast_deprecation()
 
     # Populate the model weights before serving. On a mounted network volume
