@@ -12,6 +12,8 @@ atomic per file, so an interrupted run repairs itself on the next start.
 
 import argparse
 import os
+import pathlib
+import time
 
 from huggingface_hub import hf_hub_download
 from huggingface_hub.errors import GatedRepoError
@@ -95,6 +97,56 @@ def _gated_repo_help(error: Exception) -> str:
     )
 
 
+# A download killed part-way leaves a *.incomplete scratch file behind, and
+# huggingface_hub does not reuse it on the next attempt -- the next boot starts a
+# fresh one. On a serverless worker that cannot finish a 44 GB file inside its
+# startup budget, that turns every restart into another multi-GB orphan: five
+# restarts observed in production left 81 GB of partials for one 44 GB file, and
+# nothing ever reclaimed them. The volume fills, writes start failing with
+# EDQUOT, and it reads like "the model is too big" rather than "we leaked temp
+# files".
+STALE_INCOMPLETE_MINUTES = float(os.getenv("STALE_INCOMPLETE_MINUTES", "30"))
+
+
+def _clean_stale_incomplete(root: str) -> None:
+    """Delete abandoned *.incomplete scratch files under a models directory.
+
+    Age-gated rather than unconditional: with max_workers > 1 another worker may
+    be actively writing one right now, and deleting a live partial would corrupt
+    a download that was going to succeed. Anything untouched for
+    STALE_INCOMPLETE_MINUTES belongs to a worker that is already gone -- no live
+    transfer goes that long without extending the file.
+    """
+    cache_root = pathlib.Path(root) / ".cache" / "huggingface" / "download"
+    if not cache_root.is_dir():
+        return
+
+    cutoff = time.time() - STALE_INCOMPLETE_MINUTES * 60
+    removed_bytes = 0
+    removed_count = 0
+    for partial in cache_root.rglob("*.incomplete"):
+        try:
+            stat = partial.stat()
+            if stat.st_mtime > cutoff:
+                age_min = (time.time() - stat.st_mtime) / 60
+                print(
+                    f"[models] leaving in-flight partial {partial.name} "
+                    f"({stat.st_size / 1e9:.1f} GB, touched {age_min:.0f}m ago)"
+                )
+                continue
+            removed_bytes += stat.st_size
+            removed_count += 1
+            partial.unlink()
+        except OSError as error:
+            print(f"[models] could not remove {partial.name}: {error}")
+
+    if removed_count:
+        print(
+            f"[models] reclaimed {removed_bytes / 1e9:.1f} GB from {removed_count} "
+            f"abandoned partial download(s) older than {STALE_INCOMPLETE_MINUTES:.0f}m"
+        )
+
+
 def _is_complete(directory: str, marker_name: str) -> bool:
     return os.path.exists(os.path.join(directory, marker_name))
 
@@ -154,6 +206,7 @@ def ensure_models(target_dir: str) -> str:
     os.makedirs(LTX_DIR, exist_ok=True)
 
     _prune_obsolete(models_dir)
+    _clean_stale_incomplete(LTX_DIR)
 
     marker = completion_marker()
     if _is_complete(LTX_DIR, marker):
