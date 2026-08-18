@@ -122,29 +122,50 @@ def _clean_stale_incomplete(root: str) -> None:
     if not cache_root.is_dir():
         return
 
+    # Group by target file. The name is <pathhash>.<etag>.<attempt>.incomplete,
+    # so dropping the last two dot-components identifies which real file each
+    # partial belongs to.
+    groups: dict[str, list[pathlib.Path]] = {}
+    for partial in cache_root.rglob("*.incomplete"):
+        groups.setdefault(partial.name.rsplit(".", 2)[0], []).append(partial)
+
     cutoff = time.time() - STALE_INCOMPLETE_MINUTES * 60
     removed_bytes = 0
     removed_count = 0
-    for partial in cache_root.rglob("*.incomplete"):
+
+    for members in groups.values():
+        # Newest first. At most one partial per file can be live, so everything
+        # behind the newest is provably abandoned no matter how recent it looks.
+        # This is what the age gate alone cannot handle: a fast crash loop
+        # produces partials that are all younger than the cutoff, so an
+        # age-only rule preserves every one of them. Observed in production --
+        # 16 partials totalling 232 GB for a single 44 GB file, none complete.
         try:
-            stat = partial.stat()
-            if stat.st_mtime > cutoff:
-                age_min = (time.time() - stat.st_mtime) / 60
-                print(
-                    f"[models] leaving in-flight partial {partial.name} "
-                    f"({stat.st_size / 1e9:.1f} GB, touched {age_min:.0f}m ago)"
-                )
-                continue
-            removed_bytes += stat.st_size
-            removed_count += 1
-            partial.unlink()
-        except OSError as error:
-            print(f"[models] could not remove {partial.name}: {error}")
+            members.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        except OSError:
+            continue
+
+        for rank, partial in enumerate(members):
+            try:
+                stat = partial.stat()
+                is_newest = rank == 0
+                if is_newest and stat.st_mtime > cutoff:
+                    age_min = (time.time() - stat.st_mtime) / 60
+                    print(
+                        f"[models] leaving in-flight partial {partial.name[:24]}... "
+                        f"({stat.st_size / 1e9:.1f} GB, touched {age_min:.0f}m ago)"
+                    )
+                    continue
+                removed_bytes += stat.st_size
+                removed_count += 1
+                partial.unlink()
+            except OSError as error:
+                print(f"[models] could not remove {partial.name}: {error}")
 
     if removed_count:
         print(
             f"[models] reclaimed {removed_bytes / 1e9:.1f} GB from {removed_count} "
-            f"abandoned partial download(s) older than {STALE_INCOMPLETE_MINUTES:.0f}m"
+            f"abandoned partial download(s)"
         )
 
 
