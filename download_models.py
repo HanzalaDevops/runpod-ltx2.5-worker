@@ -13,6 +13,7 @@ atomic per file, so an interrupted run repairs itself on the next start.
 import argparse
 import errno
 import os
+import sys
 import pathlib
 import time
 
@@ -23,6 +24,7 @@ from model_paths_config import (
     ENABLE_DURATION_HEAD,
     HF_REPO,
     LTX_DIR,
+    MODELS_ROOT,
     VIDEO_VAE_VARIANT,
     required_repo_files,
 )
@@ -297,7 +299,31 @@ def ensure_models(target_dir: str) -> str:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--dir", type=str, default=os.getenv("MODELS_ROOT", "/workspace/models"))
+    parser = argparse.ArgumentParser(
+        description="Populate the LTX-2.5 split pack on a models directory. "
+        "Safe to run standalone on a Pod to pre-fill a network volume, which is "
+        "the recommended way to seed one -- a serverless worker cannot finish a "
+        "44 GB file inside its startup budget."
+    )
+    parser.add_argument(
+        "--dir",
+        type=str,
+        default=os.getenv("MODELS_ROOT", "/workspace/models"),
+        help="Models root. The pack lands in <dir>/ltx-2.5/. On a Pod the network "
+        "volume usually mounts at /workspace, on serverless at /runpod-volume -- "
+        "same volume, different mount point, so what matters is that the path "
+        "inside it stays models/ltx-2.5.",
+    )
     args = parser.parse_args()
-    ensure_models(args.dir)
+
+    # Component paths are resolved at import time from MODELS_ROOT (see
+    # model_paths_config), so --dir cannot redirect them after the fact. Re-exec
+    # with the env var set instead of silently downloading somewhere else: on a
+    # Pod the mount point differs from serverless, which is exactly when someone
+    # passes --dir and expects it to be honoured.
+    if os.path.abspath(args.dir) != os.path.abspath(MODELS_ROOT):
+        print(f"[models] --dir={args.dir} differs from MODELS_ROOT={MODELS_ROOT}; re-exec with it set")
+        os.environ["MODELS_ROOT"] = os.path.abspath(args.dir)
+        os.execv(sys.executable, [sys.executable, *sys.argv])
+
+    ensure_models(MODELS_ROOT)
