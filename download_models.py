@@ -11,6 +11,7 @@ atomic per file, so an interrupted run repairs itself on the next start.
 """
 
 import argparse
+import errno
 import os
 import pathlib
 import time
@@ -147,6 +148,40 @@ def _clean_stale_incomplete(root: str) -> None:
         )
 
 
+def _out_of_space_help(models_root: str, error: OSError) -> str:
+    """Turn EDQUOT/ENOSPC into the sentence that actually unblocks the operator.
+
+    Errno 122 out of hf_hub_download reads like a download bug. It is not: the
+    volume is full. The usual occupants are a previous model generation and
+    orphaned partials from earlier killed downloads, and both are invisible
+    unless you go looking.
+    """
+    occupants = []
+    for name in [*OBSOLETE_DIRS, os.path.basename(LTX_DIR)]:
+        path = os.path.join(models_root, name)
+        if os.path.isdir(path):
+            size_gb = sum(
+                os.path.getsize(os.path.join(r, f))
+                for r, _d, files in os.walk(path)
+                for f in files
+                if not os.path.islink(os.path.join(r, f))
+            ) / 1e9
+            occupants.append(f"    {size_gb:>7.1f} GB  {path}")
+
+    listing = "\n".join(occupants) or "    (nothing found -- the volume may simply be too small)"
+    return (
+        f"Out of space on {models_root} (errno {error.errno}). The LTX-2.5 pack needs "
+        f"~66 GiB free.\n"
+        f"  Currently occupying the volume:\n{listing}\n"
+        f"  Reclaim with:\n"
+        f"    rm -rf {LTX_DIR}/.cache/huggingface/download   # orphaned partial downloads\n"
+        f"    rm -rf {os.path.join(models_root, 'ltx-2.3')} {os.path.join(models_root, 'gemma-3-12b')}\n"
+        f"      (only if no LTX-2.3 endpoint is still serving from this volume)\n"
+        f"  If it is still tight after that, the volume itself is too small -- resize it.\n"
+        f"Original error: {error}"
+    )
+
+
 def _is_complete(directory: str, marker_name: str) -> bool:
     return os.path.exists(os.path.join(directory, marker_name))
 
@@ -164,8 +199,6 @@ def _prune_obsolete(models_root: str) -> None:
     under a live 2.3 worker turns a disk-space warning into an outage. Surfacing
     the number is enough for an operator to decide.
     """
-    import shutil
-
     for name in OBSOLETE_DIRS:
         path = os.path.join(models_root, name)
         if not os.path.isdir(path):
@@ -176,11 +209,14 @@ def _prune_obsolete(models_root: str) -> None:
             for f in files
             if not os.path.islink(os.path.join(root, f))
         ) / 1e9
-        free_gb = shutil.disk_usage(models_root).free / 1e9
         print(
-            f"[models] found LTX-2.3 leftovers at {path} ({size_gb:.1f} GB). "
-            f"{free_gb:.1f} GB free. Not removing them -- another endpoint may "
-            f"still be serving from this volume. Delete manually if space is tight."
+            f"[models] found LTX-2.3 leftovers at {path} ({size_gb:.1f} GB), not "
+            f"loadable by a 2.5 pipeline. Not removing them -- another endpoint may "
+            f"still be serving from this volume. `rm -rf {path}` to reclaim.\n"
+            f"           Deliberately not reporting free space here: on a quota'd "
+            f"network volume shutil.disk_usage() reports the HOST filesystem, which "
+            f"showed 160 TB free while the volume was full and every write was "
+            f"failing with EDQUOT. Use `du -sh {models_root}/*` instead."
         )
 
 
@@ -229,6 +265,10 @@ def ensure_models(target_dir: str) -> str:
             hf_hub_download(repo_id=HF_REPO, filename=filename, local_dir=LTX_DIR, token=token)
         except GatedRepoError as error:
             raise RuntimeError(_gated_repo_help(error)) from error
+        except OSError as error:
+            if error.errno not in (errno.EDQUOT, errno.ENOSPC):
+                raise
+            raise RuntimeError(_out_of_space_help(models_dir, error)) from error
 
     _mark_complete(LTX_DIR, marker)
     print(f"[models] ltx-2.5 distilled pack complete ({VIDEO_VAE_VARIANT} VAE)")
