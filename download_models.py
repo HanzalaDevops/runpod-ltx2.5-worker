@@ -14,6 +14,7 @@ import argparse
 import os
 
 from huggingface_hub import hf_hub_download
+from huggingface_hub.errors import GatedRepoError
 
 from model_paths_config import (
     ENABLE_DURATION_HEAD,
@@ -37,6 +38,61 @@ def completion_marker() -> str:
 # on a shared volume they are exactly what makes the 2.5 pack fail mid-download
 # with EDQUOT. Pruned by directory since the 2.3 worker wrote its own subtrees.
 OBSOLETE_DIRS = ["ltx-2.3", "gemma-3-12b"]
+
+
+GATE_URL = f"https://huggingface.co/{HF_REPO}"
+
+
+def verify_token(token: str | None) -> None:
+    """Check the token with Hugging Face before starting a ~66 GiB gated download.
+
+    One cheap round-trip that separates the three failures a bare 401 conflates:
+
+      no token      -- HF_TOKEN unset or blank.
+      bad token     -- set, but HF rejects the credential (401). Revoked,
+                       expired, truncated on paste, or from a deleted account.
+      wrong account -- credential accepted, so whoami succeeds and names the
+                       account; if the download then 403s, that account simply
+                       has not accepted the model terms.
+
+    Without this, all three surface identically as a traceback out of
+    hf_hub_download after the first HEAD, and the obvious-but-usually-wrong
+    conclusion is "I need to accept the terms".
+    """
+    if not token:
+        print(
+            f"[models] HF_TOKEN is not set, and {HF_REPO} is gated. Set it on the "
+            f"endpoint to a Read token from an account that has accepted the terms "
+            f"at {GATE_URL}"
+        )
+        return
+
+    try:
+        from huggingface_hub import whoami
+
+        identity = whoami(token=token)
+        print(f"[models] HF token accepted -- authenticated as {identity.get('name', '<unknown>')}")
+    except Exception as error:
+        print(
+            f"[models] HF_TOKEN was REJECTED by Hugging Face ({type(error).__name__}). "
+            f"The credential itself is bad -- this is not a permissions problem. "
+            f"Check for a trailing newline or truncation when it was pasted into the "
+            f"endpoint env var, confirm the token has not been revoked, and that it is "
+            f"a Read token (fine-grained tokens also need 'Read access to contents of "
+            f"all public gated repos you can access')."
+        )
+
+
+def _gated_repo_help(error: Exception) -> str:
+    """Turn a GatedRepoError into a message that names the actual next step."""
+    return (
+        f"Cannot download {HF_REPO}: the repo is gated and access was refused.\n"
+        f"  401 -> the token was rejected. Re-check HF_TOKEN on the endpoint for a\n"
+        f"         trailing newline, truncation, or revocation.\n"
+        f"  403 -> the token is valid but its account has not accepted the model\n"
+        f"         terms. Open {GATE_URL} while signed in as that account and accept.\n"
+        f"Original error: {error}"
+    )
 
 
 def _is_complete(directory: str, marker_name: str) -> bool:
@@ -104,18 +160,22 @@ def ensure_models(target_dir: str) -> str:
         print(f"[models] ltx-2.5 distilled pack complete ({VIDEO_VAE_VARIANT} VAE), skipping")
         return LTX_DIR
 
-    token = os.getenv("HF_TOKEN")
-    if not token:
-        print(
-            "[models] HF_TOKEN is not set. Lightricks/LTX-2.5 is a gated repo; "
-            "if the download 401s, set HF_TOKEN to a Read token from an account "
-            "that has accepted the model terms."
-        )
+    # .strip() is not cosmetic. Pasting a token into a dashboard env var field
+    # very often carries a trailing newline or space, and Hugging Face rejects
+    # the resulting Authorization header with a 401 that reads exactly like an
+    # invalid token -- which sends you looking at permissions instead of
+    # whitespace. Empty-after-strip collapses back to None so the not-set
+    # branch still fires.
+    token = (os.getenv("HF_TOKEN") or "").strip() or None
+    verify_token(token)
 
     files = required_repo_files()
     for index, filename in enumerate(files, start=1):
         print(f"[models] ({index}/{len(files)}) ensuring {filename}...")
-        hf_hub_download(repo_id=HF_REPO, filename=filename, local_dir=LTX_DIR, token=token)
+        try:
+            hf_hub_download(repo_id=HF_REPO, filename=filename, local_dir=LTX_DIR, token=token)
+        except GatedRepoError as error:
+            raise RuntimeError(_gated_repo_help(error)) from error
 
     _mark_complete(LTX_DIR, marker)
     print(f"[models] ltx-2.5 distilled pack complete ({VIDEO_VAE_VARIANT} VAE)")
