@@ -114,7 +114,7 @@ RUN pip install --no-cache-dir \
 
 WORKDIR /app
 
-COPY rp_handler.py handler.py download_models.py staging.py model_paths_config.py ./
+COPY rp_handler.py handler.py download_models.py staging.py model_paths_config.py resumable_download.py ./
 
 # Expose the target models path, plus the local-disk cache the handler stages
 # weights into. /local-cache must live on the container disk, never on the

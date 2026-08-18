@@ -17,8 +17,9 @@ import sys
 import pathlib
 import time
 
-from huggingface_hub import hf_hub_download
-from huggingface_hub.errors import GatedRepoError
+import requests
+
+from resumable_download import download_resumable
 
 from model_paths_config import (
     ENABLE_DURATION_HEAD,
@@ -284,12 +285,17 @@ def ensure_models(target_dir: str) -> str:
     files = required_repo_files()
     for index, filename in enumerate(files, start=1):
         print(f"[models] ({index}/{len(files)}) ensuring {filename}...")
+        url = f"https://huggingface.co/{HF_REPO}/resolve/main/{filename}"
+        destination = os.path.join(LTX_DIR, filename)
         try:
-            hf_hub_download(repo_id=HF_REPO, filename=filename, local_dir=LTX_DIR, token=token)
-        except GatedRepoError as error:
-            raise RuntimeError(_gated_repo_help(error)) from error
+            download_resumable(url, destination, token=token, label=os.path.basename(filename))
+        except requests.HTTPError as error:
+            status = error.response.status_code if error.response is not None else None
+            if status in (401, 403):
+                raise RuntimeError(_gated_repo_help(error)) from error
+            raise
         except OSError as error:
-            if error.errno not in (errno.EDQUOT, errno.ENOSPC):
+            if getattr(error, "errno", None) not in (errno.EDQUOT, errno.ENOSPC):
                 raise
             raise RuntimeError(_out_of_space_help(models_dir, error)) from error
 
