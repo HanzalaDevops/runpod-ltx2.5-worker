@@ -437,13 +437,66 @@ def build_model_paths():
 _QUANT_MIN_CAPABILITY = {
     # torch._scaled_mm needs native FP8 tensor cores (Ada SM 8.9+).
     "fp8-scaled-mm": (8, 9),
-    # ltx_kernels.nvfp4 requires Blackwell.
+    # ltx_kernels.nvfp4 requires Blackwell. Capability alone is not sufficient --
+    # see _QUANT_REQUIRES_LTX_KERNELS below.
     "nvfp4-cast": (10, 0),
     "nvfp4-prequant": (10, 0),
     # fp8-cast deliberately absent: it uses FP8 only as a storage dtype and
     # upcasts to bf16 before a plain F.linear, so it has no capability floor
     # beyond what PyTorch needs to hold a float8_e4m3fn tensor.
 }
+
+# Backends that additionally need the compiled ltx-kernels extension, which this
+# image does not install (it builds CUDA sources and wants a matching nvcc).
+# Capability is not enough: a workstation Blackwell such as the RTX PRO 6000 is
+# sm_120, which clears the SM >= 10.0 floor and would sail past the capability
+# check straight into an ImportError on ltx_kernels.nvfp4.
+_QUANT_REQUIRES_LTX_KERNELS = frozenset({"nvfp4-cast", "nvfp4-prequant"})
+
+
+def _ltx_kernels_available():
+    """True when the compiled nvfp4 extension can actually be imported."""
+    try:
+        from ltx_kernels import nvfp4  # noqa: F401, PLC0415
+
+        return True
+    except Exception:
+        return False
+
+
+def check_torch_supports_arch(capability):
+    """Warn when the installed torch has no kernels for this GPU's architecture.
+
+    The failure this prevents is one of the most confusing in CUDA: a torch build
+    without SASS for the device still imports, still reports the GPU, still
+    allocates -- and then dies on the first real kernel with "no kernel image is
+    available for execution on the device", or silently falls back to a PTX JIT
+    that is slow enough to look like a hang.
+
+    Blackwell is where this bites now. A workstation RTX PRO 6000 is sm_120 and
+    needs a CUDA 12.8+ torch build; a cu126 wheel tops out below that and will
+    not carry sm_120 SASS. Comparing the device against torch.cuda.get_arch_list()
+    turns a mid-generation crash into one line at boot.
+    """
+    device_arch = f"sm_{capability[0]}{capability[1]}"
+    try:
+        arch_list = torch.cuda.get_arch_list()
+    except Exception:
+        return
+
+    print(f"[gpu] torch {torch.__version__} built for: {' '.join(arch_list) or '<none>'}")
+    if not arch_list or device_arch in arch_list:
+        return
+
+    # PTX for an older arch of the same major family can JIT forward-compatibly,
+    # but it is a performance cliff rather than a fix -- still worth flagging.
+    print(
+        f"[gpu] WARNING: this torch build has no {device_arch} kernels. Expect "
+        f"'no kernel image is available for execution on the device', or a very slow "
+        f"PTX JIT fallback. Rebuild the image with a torch wheel that targets "
+        f"{device_arch} -- for Blackwell that means the CUDA 12.8+ index, e.g. "
+        f"pip install torch --index-url https://download.pytorch.org/whl/cu128"
+    )
 
 
 def check_gpu_supports(quantization_str):
@@ -476,8 +529,20 @@ def check_gpu_supports(quantization_str):
     total_gb = torch.cuda.get_device_properties(0).total_memory / 1024 ** 3
     print(f"[gpu] {name}, compute capability {capability[0]}.{capability[1]}, {total_gb:.0f} GB")
 
+    check_torch_supports_arch(capability)
+
     if not quantization_str:
         return
+
+    if quantization_str in _QUANT_REQUIRES_LTX_KERNELS and not _ltx_kernels_available():
+        print(
+            f"[gpu] WARNING: LTX_QUANTIZATION={quantization_str} needs the compiled "
+            f"ltx-kernels extension, which this image does not install. The GPU may well "
+            f"be capable -- a workstation Blackwell (RTX PRO 6000) is sm_120 and clears "
+            f"the SM >= 10.0 floor -- but ltx_kernels.nvfp4 will fail to import. Add "
+            f"ltx-kernels to the Dockerfile with a matching nvcc and a TORCH_CUDA_ARCH_LIST "
+            f"covering your card, or use 'fp8-cast'."
+        )
 
     required = _QUANT_MIN_CAPABILITY.get(quantization_str)
     if required and capability < required:

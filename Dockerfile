@@ -56,7 +56,19 @@ RUN pip install --upgrade pip
 # These are the versions the 2.3 worker runs. They satisfy every constraint
 # ltx-core 1.2.0 declares (torch~=2.7), so this is deliberately the smallest
 # possible change from a known-good image -- see the note on LTX_REF below.
-RUN pip install --no-cache-dir \
+#
+# Installed from the CUDA 12.8 index, not plain PyPI. This is a hardware
+# requirement, not a preference: Blackwell needs a CUDA 12.8+ build to carry
+# sm_100/sm_120 SASS. PyPI's default torch wheel has historically been an older
+# CUDA variant, and one without sm_120 still imports, still reports the GPU, then
+# dies on the first real kernel with "no kernel image is available for execution
+# on the device" -- or JITs from PTX slowly enough to look like a hang.
+#
+# Harmless on Ada and Ampere (an L40S or A40 finds sm_89/sm_86 in the same wheel),
+# so this one index covers every GPU this worker has been pointed at.
+# handler.check_torch_supports_arch() verifies the result at boot.
+ARG TORCH_INDEX=https://download.pytorch.org/whl/cu128
+RUN pip install --no-cache-dir --index-url ${TORCH_INDEX} \
     torch==2.9.1 \
     torchaudio==2.9.1 \
     torchvision==0.24.1
