@@ -731,7 +731,13 @@ def handler(event):
             torch.cuda.empty_cache()
 
 
-if __name__ == "__main__":
+def boot():
+    """Everything that must happen once per worker, before accepting traffic.
+
+    Split out of the __main__ block so rp_handler.py -- the entrypoint RunPod's
+    Dockerfile actually runs -- can call it without duplicating the sequence.
+    Importing this module never triggers any of it.
+    """
     silence_use_fast_deprecation()
 
     # Populate the model weights before serving. On a mounted network volume
@@ -756,4 +762,7 @@ if __name__ == "__main__":
     # checkpoint path into a startup failure instead of a failed job.
     get_pipeline(*resolve_pipeline_config({}))
 
+
+if __name__ == "__main__":
+    boot()
     runpod.serverless.start({"handler": handler})

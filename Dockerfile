@@ -102,7 +102,7 @@ RUN pip install --no-cache-dir \
 
 WORKDIR /app
 
-COPY handler.py download_models.py staging.py model_paths_config.py ./
+COPY rp_handler.py handler.py download_models.py staging.py model_paths_config.py ./
 
 # Expose the target models path, plus the local-disk cache the handler stages
 # weights into. /local-cache must live on the container disk, never on the
@@ -127,4 +127,7 @@ sig = inspect.signature(DistilledPipeline.__init__); \
 assert 'model_paths' in sig.parameters, 'DistilledPipeline no longer takes model_paths -- LTX_REF is wrong'; \
 print('LTX-2.5 API check passed')"
 
-CMD ["python", "-u", "handler.py"]
+# Entrypoint is rp_handler.py, matching RunPod's reference worker layout. It
+# calls handler.boot() then runpod.serverless.start(); handler.py holds the
+# implementation and is import-safe on its own.
+CMD ["python", "-u", "rp_handler.py"]
