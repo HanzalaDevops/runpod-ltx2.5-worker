@@ -1,0 +1,11 @@
+{
+  "input": {
+    "prompt": "A red panda on a mossy branch in a bamboo forest, dappled sunlight, camera static, ambient forest sound.",
+    "s3_config": {
+      "region": "REPLACE_WITH_DO_REGION",
+      "bucketName": "REPLACE_WITH_BUCKET_NAME",
+      "accessId": "REPLACE_WITH_SPACES_KEY",
+      "accessSecret": "REPLACE_WITH_SPACES_SECRET"
+    }
+  }
+}

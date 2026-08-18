@@ -1,0 +1,27 @@
+{
+  "input": {
+    "prompt": "The woman in the red coat turns her head slowly to look off-camera left, snow settling on her shoulders. The camera pushes in gently. Ambient sound of falling snow and distant traffic.",
+
+    "width": 768,
+    "height": 512,
+    "num_frames": 49,
+    "frame_rate": 25.0,
+    "seed": 42,
+
+    "image_conditioning": [
+      {
+        "url": "https://REPLACE_WITH_PUBLIC_OR_PRESIGNED_IMAGE_URL/first-frame.png",
+        "frame_idx": 0,
+        "strength": 1.0
+      }
+    ],
+
+    "s3_config": {
+      "region": "REPLACE_WITH_DO_REGION",
+      "bucketName": "REPLACE_WITH_BUCKET_NAME",
+      "accessId": "REPLACE_WITH_SPACES_KEY",
+      "accessSecret": "REPLACE_WITH_SPACES_SECRET"
+    },
+    "s3_prefix": "ltx-2.5/renders"
+  }
+}
