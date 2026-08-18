@@ -1,0 +1,17 @@
+{
+  "input": {
+    "prompt": "A medium close-up of a red panda sitting on a mossy branch in a bamboo forest, chewing slowly on a bamboo leaf and looking directly at the camera. Its ears twitch. Soft dappled sunlight filters through the canopy behind it, the background softly blurred. The camera holds steady throughout. Ambient forest sound: light wind through leaves and distant birdsong.",
+    "width": 768,
+    "height": 512,
+    "num_frames": 249,
+    "frame_rate": 25.0,
+    "seed": 42,
+    "s3_config": {
+      "region": "REPLACE_WITH_DO_REGION",
+      "bucketName": "REPLACE_WITH_BUCKET_NAME",
+      "accessId": "REPLACE_WITH_SPACES_KEY",
+      "accessSecret": "REPLACE_WITH_SPACES_SECRET"
+    },
+    "s3_prefix": "ltx-2.5/renders"
+  }
+}

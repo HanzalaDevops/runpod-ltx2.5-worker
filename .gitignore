@@ -91,3 +91,8 @@ temp/
 # ---- OS ----
 .DS_Store
 Thumbs.db
+
+# ---- Request bodies holding real bucket credentials ----
+# Keep filled-in copies here; the tracked requests/*.json stay placeholder-only.
+requests/local/
+requests/*.local.json
