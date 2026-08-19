@@ -26,8 +26,6 @@ MANIFEST
 venv/
 env/
 ENV/
-.env
-.env.*
 !.env.example
 
 # ---- Testing / coverage ----
@@ -69,7 +67,6 @@ output/
 
 # ---- Secrets / credentials ----
 # HF token, S3/boto3 credentials must never be committed
-.env
 *.pem
 *.key
 credentials.json
@@ -82,7 +79,6 @@ temp/
 *.tmp
 
 # ---- IDE / editor ----
-.vscode/
 .idea/
 *.swp
 *.swo
@@ -96,3 +92,5 @@ Thumbs.db
 # Keep filled-in copies here; the tracked requests/*.json stay placeholder-only.
 requests/local/
 requests/*.local.json
+config.bat
+node_modules

@@ -174,6 +174,23 @@ DIFFVAE_OPTIMIZATION = os.getenv("LTX_DIFFVAE_OPTIMIZATION", "chunked_eager")
 # upstream: assert_resolution(is_two_stage=True) requires multiples of 64
 # because stage 1 runs at half resolution and must still land on the VAE's 32px
 # spatial grid, and the causal VAE needs (frames - 1) % 8 == 0.
+# Final mp4 encode quality. Upstream's encode_video defaults are crf=19 and
+# preset="veryfast", tuned for a CLI where encode time is visible next to a short
+# generation. Here it is the opposite: generation runs for minutes and the encode
+# is a rounding error, so trading a little encode time for less generation loss is
+# free quality.
+#
+# It matters more than it sounds for this model's typical output. Falling snow,
+# rain, foliage and film grain are high-entropy, low-correlation detail -- exactly
+# what a rate-controlled H.264 encoder throws away first. At crf 19 with a
+# speed-first preset that detail smears into blocky patches, and the artifact is
+# indistinguishable from the model having generated mush.
+#
+# crf is logarithmic-ish: 19 -> 16 is roughly a 40% bitrate increase for a
+# visible gain on exactly this kind of content. Both are per-request overridable.
+DEFAULT_OUTPUT_CRF = int(os.getenv("LTX_OUTPUT_CRF", "16"))
+DEFAULT_OUTPUT_PRESET = os.getenv("LTX_OUTPUT_PRESET", "medium")
+
 RESOLUTION_MULTIPLE = 64
 FRAME_TEMPORAL_SCALE = 8
 
@@ -698,6 +715,8 @@ def handler(event):
     num_frames = resolve_num_frames_request(job_input)
 
     quantization, offload_mode = resolve_pipeline_config(job_input)
+    output_crf = int(job_input.get("output_crf", DEFAULT_OUTPUT_CRF))
+    output_preset = job_input.get("output_preset", DEFAULT_OUTPUT_PRESET)
     image_conditioning = job_input.get("image_conditioning", [])
     temp_files = []
     timer = StageTimer(event.get("id"))
@@ -757,6 +776,8 @@ def handler(event):
                 audio=audio_gen,
                 output_path=output_filename,
                 video_chunks_number=get_video_chunks_number(resolved_frames, tiling_config),
+                crf=output_crf,
+                preset=output_preset,
             )
 
         with timer.stage("upload"):
@@ -767,6 +788,8 @@ def handler(event):
             height=height,
             width=width,
             num_frames=resolved_frames,
+            output_crf=output_crf,
+            output_preset=output_preset,
         )
         return {
             "status": "success",
