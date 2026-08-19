@@ -10,6 +10,10 @@ Every file is fetched individually with hf_hub_download, which is resumable and
 atomic per file, so an interrupted run repairs itself on the next start.
 """
 
+import utils.clients
+import utils.http_session
+import utils.transport
+import utils.session
 import argparse
 import errno
 import os
